@@ -1,0 +1,13 @@
+accelerate>=1.13.0
+datasets>=4.8.4
+fastparquet>=2026.3.0
+groq>=1.1.2
+huggingface-hub>=1.11.0
+ipykernel>=7.2.0
+openai>=2.32.0
+pandas>=3.0.2
+protobuf>=7.34.1
+sentencepiece>=0.2.1
+tiktoken>=0.12.0
+torch>=2.11.0
+transformers>=5.5.4
