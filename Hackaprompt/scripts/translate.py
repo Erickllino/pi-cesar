@@ -94,12 +94,14 @@ def translate_row(client: OpenAI, model: str, idx: int, row: pd.Series) -> dict:
     try:
         result["prompt_tr"] = translate_text(client, model, row["prompt"])
         result["user_input_tr"] = translate_text(client, model, row["user_input"])
+        result["sys_prompt_tr"] = translate_text(client, model, row["sys_prompt"])  
     except Exception as exc:  # noqa: BLE001
         # Em caso de falha persistente, mantém o texto ORIGINAL (não corrompe em silêncio)
         # e registra o índice para refazer depois.
         result["error"] = str(exc)
         result["prompt_tr"] = row["prompt"]
         result["user_input_tr"] = row["user_input"]
+        result["sys_prompt_tr"] = row["sys_prompt"]
     return result
 
 
@@ -176,10 +178,14 @@ def translate_dataset(client: OpenAI, model: str, output_path: Path,
                     if check_translation(row["user_input"], r["user_input_tr"]):
                         warning_records.append({"index": i, "label": label, "original": row["user_input"],
                                                 "translated": r["user_input_tr"], "type": "user_input"})
+                    if check_translation(row["sys_prompt"], r["sys_prompt_tr"]):
+                        warning_records.append({"index": i, "label": label, "original": row["sys_prompt"],
+                                                "translated": r["sys_prompt_tr"], "type": "sys_prompt"})
 
                 new_row = row.to_dict()
                 new_row["prompt"] = r["prompt_tr"]
                 new_row["user_input"] = r["user_input_tr"]
+                new_row["sys_prompt"] = r["sys_prompt_tr"]
                 new_rows.append(new_row)
 
             # 3) checkpoint: anexa o chunk e salva (resume parte daqui se cair)
