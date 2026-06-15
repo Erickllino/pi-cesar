@@ -42,3 +42,46 @@ Bônus pt-BR / local (vale citar, especialmente o primeiro, que é da sua própr
 SecBERT (Amorim, TCC CIn/UFPE) — classificação de prompts de jailbreak em português com BERTimbau; posicionado como um avanço na segurança de LLMs em português. É um TCC, então tier menor, mas é da UFPE — boa conexão local e mostra que o tema já germina aí. Ufpe
 MiJaBench [arXiv:2601.04389] — inclui testes em português para checar consistência cross-lingual de modos de falha.
 Jailbreaking and Mitigation of Vulnerabilities in LLMs [arXiv:2410.15236] — survey com uma taxonomia que inclui explicitamente jailbreak multilíngue; bom para comparar com a árvore do Geng et al.
+
+
+
+# Dados -
+# Direct Injection:
+## 1. Qualifire Prompt-Injection Benchmark
+
+**🔗 Link:** https://huggingface.co/datasets/qualifire/Qualifire-prompt-injection-benchmark
+## 2. PINT Benchmark
+
+**🔗 Link:** https://github.com/lakeraai/pint-benchmark
+## 3. NotInject / PIGuard (InjecGuard)
+
+**🔗 Link:** https://huggingface.co/datasets/leolee99/NotInject
+
+## 4. Hackaprompt
+
+
+# Indirect Injection:
+
+# 1 BIPIA
+https://huggingface.co/datasets/MAlmasabi/Indirect-Prompt-Injection-BIPIA-GPT
+
+Indirect Prompt Injection Detection Dataset (BIPIA + GPT-4o-mini)
+Dataset Summary
+
+This dataset contains 70,000 examples for detecting indirect prompt injection attacks in Large Language Models. It combines:
+
+    35,000 malicious samples from the BIPIA benchmark (cleaned and processed)
+    35,000 benign samples generated using GPT-4o-mini
+
+# 2 LLM Mail challange
+
+Microsoft
+https://huggingface.co/datasets/microsoft/llmail-inject-challenge
+
+# 3 Inject Agent:
+
+https://github.com/uiuc-kang-lab/InjecAgent
+
+# 4 Poison RAG:
+
+https://github.com/sleeepeer/PoisonedRAG
