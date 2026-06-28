@@ -13,7 +13,7 @@ PROJECT_ROOT = ROOT.parent                 # PI-Cesar
 # Modelo de teste que vai GERAR tr_completion (rodando o prompt traduzido).
 # Llama-3.1-8B é o mais próximo do gpt-3.5 original; troque via --model para
 # testar outros (inclusive gpt-3.5 quando der).
-MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+MODEL = "NousResearch/Meta-Llama-3.1-8B-Instruct"
 
 DEFAULT_CONCURRENCY = 16   # requisicoes simultaneas ao vLLM (o servidor batcheia sozinho)
 DEFAULT_CHUNK_SIZE = 200   # linhas processadas antes de cada checkpoint (salvar + retomada)
@@ -56,7 +56,7 @@ def token_count(text) -> int:
     """Número de tokens do user_input via tiktoken (cl100k_base)."""
     if not isinstance(text, str) or not text:
         return 0
-    return len(_ENC.encode(text))
+    return len(_ENC.encode(text, disallowed_special=()))
 
 
 def hackaprompt_score(level, tok: int, correct: bool) -> float:

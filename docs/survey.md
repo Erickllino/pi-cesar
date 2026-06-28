@@ -14,8 +14,8 @@ Apresenta o XSAFETY, primeiro benchmark de segurança multilíngue em larga esca
 Disseca por que a segurança falha fora do inglês — útil para a fundamentação teórica da Seção 6. → Seção 6.
 
 
-5. Prompt Injection Attacks on LLMs: A Survey of Attack Methods, Root Causes, and Defense Strategies — Geng et al. (CMC 2026). [DOI:10.32604/cmc.2025.074081]
-Seu survey-âncora. Note que ele já tem uma seção sobre dimensões cross-lingual e defende detecção comportamental agnóstica de língua, treino adversarial cross-lingual e datasets de segurança multilíngues como frentes de pesquisa. → Seções 4 e 5 (taxonomia + defesas). ScienceDirect
+<!-- 5. Prompt Injection Attacks on LLMs: A Survey of Attack Methods, Root Causes, and Defense Strategies — Geng et al. (CMC 2026). [DOI:10.32604/cmc.2025.074081]
+Seu survey-âncora. Note que ele já tem uma seção sobre dimensões cross-lingual e defende detecção comportamental agnóstica de língua, treino adversarial cross-lingual e datasets de segurança multilíngues como frentes de pesquisa. → Seções 4 e 5 (taxonomia + defesas). ScienceDirect -->
 
 
 6. Multilingual Prompt Injection Attacks Detection — Abbasi et al. (SSRN 2025). [abstract 5244151]
@@ -85,3 +85,8 @@ https://github.com/uiuc-kang-lab/InjecAgent
 # 4 Poison RAG:
 
 https://github.com/sleeepeer/PoisonedRAG
+
+
+
+
+Fine tuning para PI: https://arxiv.org/abs/2506.05446 (Sentinel: SOTA model to protect against prompt injections)
