@@ -15,8 +15,10 @@ DEFAULT_CHUNK_SIZE = 200   # linhas processadas antes de cada checkpoint (salvar
 # Sufixo aplicado às colunas traduzidas (ex.: "prompt" -> "prompt_tr").
 TR_SUFFIX = "_tr"
 
+CURRENT = "email"
+
 # Entrada/saída padrão (sobrescrevíveis via --input/--output).
-DEFAULT_INPUT = PROJECT_ROOT / "Data" / "BIPIA" / "Original" / "email" / "test.jsonl"
+DEFAULT_INPUT = PROJECT_ROOT / "Data" / "BIPIA" / "Original" / CURRENT / "test.jsonl"
 
 
 def _load_env_file(path: Path) -> None:
@@ -309,7 +311,12 @@ def main():
     if args.output:
         output_path = Path(args.output)
     else:
-        output_path = input_path.with_name(f"{input_path.stem}_tr{input_path.suffix}")
+        # Espelha o caminho de entrada trocando "Original" por "Translated" e
+        # adicionando o sufixo _tr ao nome (ex.: .../Original/email/test.jsonl
+        # -> .../Translated/email/test_tr.jsonl).
+        parts = ["Translated" if p == "Original" else p for p in input_path.parts]
+        mirrored = Path(*parts)
+        output_path = mirrored.with_name(f"{input_path.stem}_tr{input_path.suffix}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     columns = [c.strip() for c in args.columns.split(",") if c.strip()] if args.columns else None
