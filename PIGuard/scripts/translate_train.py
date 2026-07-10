@@ -8,10 +8,11 @@ from openai import OpenAI
 
 ROOT = Path(__file__).parent.parent
 PROJECT_ROOT = ROOT.parent
-MODEL = "Qwen/Qwen2.5-72B-Instruct-AWQ"
+MODEL = "gpt-4o"
 
-DEFAULT_CONCURRENCY = 16   # requisicoes simultaneas ao vLLM (o servidor batcheia sozinho)
-DEFAULT_CHUNK_SIZE = 200   # linhas processadas antes de cada checkpoint (salvar + retomada)
+DEFAULT_CONCURRENCY = 4     # requisicoes simultaneas a API da OpenAI (cuidado com rate limits)
+DEFAULT_CHUNK_SIZE = 200    # linhas processadas antes de cada checkpoint (salvar + retomada)
+MAX_RETRIES = 8            # o SDK faz backoff exponencial e respeita o Retry-After em 429
 
 
 def _load_env_file(path: Path) -> None:
@@ -29,10 +30,7 @@ def _load_env_file(path: Path) -> None:
 
 _load_env_file(PROJECT_ROOT / ".env")
 
-HOST = "127.0.0.1"
-PORT = 8000
-VLLM_BASE_URL = f"http://{HOST}:{PORT}/v1"
-VLLM_API_KEY = os.environ.get("VLLM_API_KEY", "EMPTY").strip() or "EMPTY"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 CURRENT = "train"
 INPUT_PATH = PROJECT_ROOT / "Data" / "PIGuard" / "Original" / f"{CURRENT}.json"
 OUTPUT_DIR = PROJECT_ROOT / "Data" / "PIGuard" / "Translated"
@@ -169,7 +167,7 @@ def translate_dataset(client: OpenAI, model: str, output_path: Path,
             chunk_end = min(chunk_start + chunk_size, total)
             indices = list(range(chunk_start, chunk_end))
 
-            # 1) dispara o chunk em paralelo — o vLLM batcheia do lado servidor
+            # 1) dispara o chunk em paralelo — várias requisições simultâneas à API
             futures = [pool.submit(translate_row, client, model, i, df_orig.iloc[i]) for i in indices]
             results = {f.result()["index"]: f.result() for f in futures}
 
@@ -215,11 +213,10 @@ def translate_dataset(client: OpenAI, model: str, output_path: Path,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Traduz o dataset para pt-BR usando um servidor vLLM local (API OpenAI-compatible), em paralelo.")
-    parser.add_argument("--model", default=MODEL, help="Modelo servido pelo vLLM")
+        description="Traduz o dataset para pt-BR usando a API da OpenAI (gpt-4o), em paralelo.")
+    parser.add_argument("--model", default=MODEL, help="Modelo da OpenAI (default: gpt-4o)")
     parser.add_argument("--limit", type=int, default=None, help="Limita número de amostras (útil para teste)")
     parser.add_argument("--output", default=None, help="Caminho do json de saída")
-    parser.add_argument("--base-url", default=VLLM_BASE_URL, help=f"Base URL do vLLM (default: {VLLM_BASE_URL})")
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY,
                         help=f"Requisições simultâneas (default: {DEFAULT_CONCURRENCY})")
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE,
@@ -229,12 +226,17 @@ def main():
     if not INPUT_PATH.exists():
         raise FileNotFoundError(f"Dataset RAW não encontrado em: {INPUT_PATH}")
 
+    if not OPENAI_API_KEY:
+        raise RuntimeError(
+            "OPENAI_API_KEY não encontrada. Defina no ambiente ou no arquivo .env do projeto.")
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     model_slug = args.model.replace("/", "__")
     output_path = Path(args.output) if args.output else OUTPUT_DIR / f"{CURRENT}_{model_slug}.json"
 
-    # timeout/max_retries dão resiliência a engasgos transitórios do servidor
-    client = OpenAI(api_key=VLLM_API_KEY, base_url=args.base_url, timeout=120.0, max_retries=3)
+    # timeout/max_retries dão resiliência a engasgos transitórios e a rate limits (429):
+    # o SDK faz backoff exponencial com jitter e respeita o header Retry-After.
+    client = OpenAI(api_key=OPENAI_API_KEY, timeout=120.0, max_retries=MAX_RETRIES)
 
     translate_dataset(client, args.model, output_path, args.limit, args.concurrency, args.chunk_size)
 
