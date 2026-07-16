@@ -10,7 +10,7 @@ import pandas as pd
 from openai import OpenAI
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-MODEL = "gpt-4o"  # substituído por --model em runtime
+MODEL = "Qwen/Qwen2.5-72B-Instruct-AWQ"  # substituído por --model em runtime
 
 ROOT = Path(__file__).parent.parent
 PROJECT_ROOT = ROOT.parent
@@ -74,11 +74,8 @@ LANGUAGES = {
 LANGUAGE_CODE = "pt_br"
 LANGUAGE_NAME = "português brasileiro (pt-BR)"
 
-splits = {
-    "NotInject_one": "data/NotInject_one-00000-of-00001.parquet",
-    "NotInject_two": "data/NotInject_two-00000-of-00001.parquet",
-    "NotInject_three": "data/NotInject_three-00000-of-00001.parquet",
-}
+# Le os NotInject direto dos JSON locais em Data/.../Original (sem baixar do HuggingFace).
+splits = ("NotInject_one", "NotInject_two", "NotInject_three")
 
 WORD_BATCH_SIZE = 10
 CODE_BLOCK_PATTERN = re.compile(r"```.*?```", re.DOTALL)
@@ -524,7 +521,7 @@ def translate_split(split_name: str, client: OpenAI, model: str, output_dir: str
     print(f"\n=== Traduzindo split: {split_name} ===")
 
     checkpoint_path = f"{output_dir}/{split_name}_{LANGUAGE_CODE}.parquet"
-    df_orig = pd.read_parquet("hf://datasets/leolee99/NotInject/" + splits[split_name])
+    df_orig = pd.read_json(DS_EN / f"{split_name}.json")
     if limit is not None:
         df_orig = df_orig.head(limit).copy()
     total = len(df_orig)
@@ -744,18 +741,18 @@ def copy_to_eval_dir(model: str, output_dir: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="gpt-4o", help="Modelo exposto pela API de tradução")
+    parser.add_argument("--model", default="Qwen/Qwen2.5-72B-Instruct-AWQ", help="Modelo exposto pela API de tradução")
     parser.add_argument("--language", choices=LANGUAGES, default="pt_br", help="Idioma de destino")
     parser.add_argument("--limit", type=int, default=None, help="Máximo de registros por arquivo; use para testes")
-    parser.add_argument("--base-url", default=None, help="Base URL compatível com OpenAI, como http://127.0.0.1:11434/v1")
-    parser.add_argument("--api-key", default=None, help="Chave da API; para Ollama, pode usar qualquer valor")
+    parser.add_argument("--base-url", default="http://127.0.0.1:8000/v1", help="Base URL compatível com OpenAI (vLLM local por padrão)")
+    parser.add_argument("--api-key", default="EMPTY", help="Chave da API; para vLLM/Ollama pode ser qualquer valor")
     parser.add_argument("--output-dir", default=None, help="Diretório de saída; recomendado para execuções de teste")
     parser.add_argument(
         "--datasets",
         nargs="+",
         choices=["notinject", "wildguard", "bipia", "injections"],
-        default=["notinject", "wildguard", "bipia", "injections"],
-        help="Quais datasets traduzir",
+        default=["notinject", "wildguard", "bipia"],
+        help="Quais datasets traduzir (injections omitido por padrão: já vem do train completo)",
     )
     args = parser.parse_args()
 
