@@ -37,9 +37,8 @@ PORT = 8000
 VLLM_BASE_URL = f"http://{HOST}:{PORT}/v1"
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", "EMPTY").strip() or "EMPTY"
 CURRENT = "train"
-# Os dados ficam em <projeto>/Data/Data/PIGuard (o diretorio Data contem um subdiretorio Data).
-INPUT_PATH = PROJECT_ROOT / "Data" / "Data" / "PIGuard" / "Original" / f"{CURRENT}.json"
-OUTPUT_DIR = PROJECT_ROOT / "Data" / "Data" / "PIGuard" / "Translated"
+INPUT_PATH = PROJECT_ROOT / "Data" / "PIGuard" / "Original" / f"{CURRENT}.json"
+OUTPUT_DIR = PROJECT_ROOT / "Data" / "PIGuard" / "Translated"
 
 LANGUAGES = {
     "pt_br": {
@@ -310,8 +309,8 @@ def translate_dataset(client: OpenAI, model: str, output_path: Path,
             for i in indices:
                 r = results[i]
                 row = r["row"]
-                label = row["label"]
-                source = row["source"]
+                label = int(row["label"])       # numpy int64 -> int nativo (JSON serializavel)
+                source = str(row["source"])
                 pct = (i + 1) / total * 100
 
                 if r["error"]:
@@ -370,12 +369,12 @@ def main():
 
     configure_language(args.language)
     global INPUT_PATH, OUTPUT_DIR
-    INPUT_PATH = Path(args.input) if args.input else PROJECT_ROOT / "Data" / "Data" / "PIGuard" / "Original" / "train.json"
+    INPUT_PATH = Path(args.input) if args.input else PROJECT_ROOT / "Data" / "PIGuard" / "Original" / "train.json"
     model_slug = args.model.replace("/", "__").replace(":", "_")
     OUTPUT_DIR = (
         Path(args.output_dir)
         if args.output_dir
-        else PROJECT_ROOT / "Data" / "Data" / "PIGuard" / f"Translated_{args.language}" / model_slug
+        else PROJECT_ROOT / "Data" / "PIGuard" / f"Translated_{args.language}" / model_slug
     )
 
     if not INPUT_PATH.exists():

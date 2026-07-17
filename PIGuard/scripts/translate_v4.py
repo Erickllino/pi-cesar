@@ -14,8 +14,7 @@ MODEL = "Qwen/Qwen2.5-72B-Instruct-AWQ"  # substituído por --model em runtime
 
 ROOT = Path(__file__).parent.parent
 PROJECT_ROOT = ROOT.parent
-# Os dados ficam em <projeto>/Data/Data/PIGuard (o diretorio Data contem um subdiretorio Data).
-DATA_DIR = PROJECT_ROOT / "Data" / "Data" / "PIGuard"
+DATA_DIR = PROJECT_ROOT / "Data" / "PIGuard"
 DS_EN = DATA_DIR / "Original"
 
 CATEGORY_MAP = {
