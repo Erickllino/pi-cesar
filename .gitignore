@@ -1,0 +1,20 @@
+# Local Python environment and credentials
+.venv/
+.env
+__pycache__/
+*.py[cod]
+
+# Editor and notebook state
+.vscode/
+.ipynb_checkpoints/
+
+# Source datasets, translated outputs, checkpoints and warnings are local data.
+Data/
+
+# Test and build artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
