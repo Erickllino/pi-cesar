@@ -12,9 +12,22 @@ O pipeline considera `context`, `target_inst`, `injected_task` e `target_task_an
 
 ## Proteções no prompt
 
-Cada chamada usa um system prompt que define o conteúdo como dado de dataset, não como instrução. O texto é delimitado por `<texto_para_traduzir>...</texto_para_traduzir>`, seguido por um lembrete após o conteúdo. Há few-shots de uma injeção e de uma URL preservada.
+Cada chamada usa um system prompt que define o conteúdo como dado de dataset, não como instrução. O texto é delimitado por `<texto_para_traduzir>...</texto_para_traduzir>`, seguido por um lembrete após o conteúdo. Há dois few-shots baseados em `injected_task` reais do `dolly_closed_qa`: um pedido com URL e uma falsa suspensão de acesso.
 
 O modelo deve traduzir ataques, jailbreaks e gatilhos de continuação de forma literal, sem obedecer, recusar ou continuar o conteúdo.
+
+## Mapa do código
+
+As funções principais de `scripts/translate.py` são:
+
+- `build_system_prompt()` e `build_user_message()`: montam as instruções que separam o papel de tradutor do conteúdo adversarial do dataset.
+- `build_fewshot()`: adiciona dois exemplos reais de `injected_task` do PIArena para demonstrar a tradução literal de payloads.
+- `should_translate()`: define quais campos passam pelo modelo; em `lcc_long`, preserva o contexto Java e a resposta de código.
+- `mask_code_blocks()` e `restore_markers()`: protegem blocos cercados por crase tripla com marcadores e rejeitam saída com marcador perdido, duplicado ou fora de ordem.
+- `validate_structure()`: confirma que código e URLs são idênticos aos da origem depois da tradução.
+- `unexpected_added_chars()`: detecta aumento de caracteres CJK, cirílicos ou árabes quando esses scripts não são esperados no idioma de destino.
+- `translate_field()`: executa chamada ao modelo, retry, validações e fallback para o texto original se o campo continuar inválido.
+- `translate_dataset()`: percorre o JSON, mantém o checkpoint, grava warnings e mostra o resumo de cada dataset.
 
 ## Preservação e validação
 

@@ -1,7 +1,7 @@
 # Tradução Multilíngue do PIArena
 
 Este projeto usa o PIArena exclusivamente como fonte de datasets para
-tradução para português brasileiro, alemão e árabe. Ele não inclui nem executa
+tradução para português brasileiro, espanhol, alemão e árabe. Ele não inclui nem executa
 os ataques, defesas, agentes ou avaliadores do repositório upstream.
 
 ## Estrutura

@@ -13,6 +13,14 @@ SPEC.loader.exec_module(TRANSLATOR)
 
 
 class TranslationStructureTests(unittest.TestCase):
+    def test_spanish_fewshot_uses_piarena_examples(self) -> None:
+        fewshot = TRANSLATOR.build_fewshot("es")
+        messages = "\n".join(message["content"] for message in fewshot)
+
+        self.assertIn("https://arlington-schools-update.info", messages)
+        self.assertIn("current subscription term has expired", messages)
+        self.assertNotIn("PWNED", messages)
+
     def test_lcc_long_literal_fields_are_not_translated(self) -> None:
         self.assertFalse(TRANSLATOR.should_translate("lcc_long", "context"))
         self.assertFalse(TRANSLATOR.should_translate("lcc_long", "target_task_answer"))
