@@ -28,6 +28,26 @@ Baixar os JSONs:
 python scripts\download.py --revision main
 ```
 
+Execução padrão pela API da OpenAI. Sem `--limit`, traduz todos os registros;
+o modelo padrão é `gpt-4o` e `--max-tokens` não é imposto pelo script:
+
+```cmd
+set OPENAI_API_KEY=SUA_CHAVE
+
+python scripts\translate.py --language pt_br
+```
+
+Para testar somente algumas linhas, acrescente `--limit`. Para outro idioma,
+informe somente a língua desejada:
+
+```cmd
+python scripts\translate.py ^
+  --language de ^
+  --limit 5
+```
+
+Use `--model` apenas quando quiser trocar o modelo padrão `gpt-4o`.
+
 Teste local com Ollama:
 
 ```cmd
@@ -39,8 +59,10 @@ python scripts\translate.py ^
   --base-url "http://localhost:11434/v1" ^
   --datasets dolly_closed_qa hotpotqa_rag lcc_long ^
   --limit 2 ^
-  --max-tokens 512 ^
-  --restart
+  --max-tokens 512
 ```
 
 As saídas ficam em `Data/PIArena/Translated/<modelo>/<idioma>/`.
+O script retoma automaticamente o checkpoint existente. Para refazer uma
+execução, remova manualmente a saída correspondente ou informe outro
+`--output-dir`.

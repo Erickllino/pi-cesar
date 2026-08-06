@@ -34,7 +34,10 @@ Se as duas tentativas falharem, o campo original é preservado e um registro é 
 - `unexpected_script_fallback`
 - `translation_error`
 
-O pipeline retoma automaticamente checkpoints existentes. `--restart` apaga apenas a saída e os warnings dos datasets selecionados. Ao final de cada dataset, o script mostra registros processados, número de fallbacks, linhas afetadas e a contagem de warnings por tipo.
+O pipeline retoma automaticamente checkpoints existentes. Para refazer uma
+execução, remova a saída correspondente ou use outro `--output-dir`. Ao final
+de cada dataset, o script mostra registros processados, número de fallbacks,
+linhas afetadas e a contagem de warnings por tipo.
 
 ## Limitações
 

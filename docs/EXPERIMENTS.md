@@ -12,7 +12,7 @@ Modelo:
 Endpoint:
 Revisão do dataset PIArena:
 Datasets processados:
-Parâmetros: --timeout, --max-tokens, --limit, --restart
+Parâmetros: --timeout, --max-tokens, --limit, --output-dir
 
 Linhas de entrada:
 Linhas concluídas:

@@ -448,7 +448,6 @@ def translate_dataset(
     language_code: str,
     output_dir: Path,
     limit: int | None,
-    restart: bool,
     max_tokens: int | None,
 ) -> None:
     source_path = DATASETS_DIR / f"{dataset}.json"
@@ -457,16 +456,12 @@ def translate_dataset(
     if limit is not None:
         source = source[:limit]
 
-    if restart and output_path.exists():
-        output_path.unlink()
-        clear_dataset_warnings(output_dir, language_code, dataset)
-
     if output_path.exists():
         translated: list[dict[str, Any]] = json.loads(output_path.read_text(encoding="utf-8"))
         if len(translated) > len(source):
             raise ValueError(
                 f"Checkpoint de {dataset} tem {len(translated)} linhas, mas a entrada tem {len(source)}. "
-                "Use --restart ou outro --output-dir."
+                "Use outro --output-dir ou remova o checkpoint manualmente."
             )
         start = len(translated)
         print(f"[{dataset}] retomando em {start}/{len(source)}")
@@ -540,10 +535,10 @@ def translate_dataset(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Traduz os datasets do PIArena com protecoes estruturais.")
-    parser.add_argument("--language", choices=LANGUAGES, required=True, help="Idioma-alvo")
+    parser.add_argument("--language", choices=LANGUAGES, default="pt_br", help="Idioma-alvo")
     parser.add_argument("--model", default="gpt-4o", help="Modelo exposto pela API de traducao")
     parser.add_argument("--base-url", default=None, help="URL base de uma API OpenAI compativel")
-    parser.add_argument("--api-key-env", default="OPENAI_API_KEY", help="Variavel de ambiente com a chave da API")
+    parser.add_argument("--api-key", default=None, help="Chave da API; para Ollama, pode usar qualquer valor")
     parser.add_argument("--datasets", nargs="+", choices=SUPPORTED_DATASETS, default=SUPPORTED_DATASETS)
     parser.add_argument("--limit", type=int, default=None, help="Limita linhas por dataset; usa subdiretorio separado")
     parser.add_argument(
@@ -559,15 +554,16 @@ def parse_args() -> argparse.Namespace:
         help="Tempo maximo, em segundos, por chamada da API",
     )
     parser.add_argument("--output-dir", type=Path, default=None, help="Diretorio de saida alternativo")
-    parser.add_argument("--restart", action="store_true", help="Reinicia explicitamente os datasets selecionados")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    api_key = os.environ.get(args.api_key_env)
-    if not api_key:
-        raise ValueError(f"Defina a variavel de ambiente {args.api_key_env} antes de executar.")
+    api_key = args.api_key or os.environ.get("OPENAI_API_KEY")
+    if args.base_url:
+        api_key = api_key or "ollama"
+    elif not api_key:
+        raise ValueError("Defina a variavel de ambiente OPENAI_API_KEY antes de executar.")
 
     default_output = TRANSLATED_DIR / model_slug(args.model) / args.language
     if args.limit is not None:
@@ -587,7 +583,6 @@ def main() -> None:
             language_code=args.language,
             output_dir=output_dir,
             limit=args.limit,
-            restart=args.restart,
             max_tokens=args.max_tokens,
         )
 
