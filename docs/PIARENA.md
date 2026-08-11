@@ -10,15 +10,30 @@ Os dados vêm de [`sleeepeer/PIArena`](https://huggingface.co/datasets/sleeepeer
 
 ## Arquivos
 
-A fonte possui 16 arquivos JSON. Treze são traduzidos por padrão; os três arquivos abaixo ficam de fora porque medem corrupção de conhecimento e não preservam a mesma métrica após tradução:
-
-- `hotpotqa_rag_knowledge_corruption`
-- `msmarco_rag_knowledge_corruption`
-- `nq_rag_knowledge_corruption`
+A fonte possui 16 arquivos JSON. Todos são traduzidos por padrão, inclusive os
+três arquivos de corrupção de conhecimento. O pipeline apenas traduz os dados;
+qualquer adaptação posterior das métricas do benchmark é responsabilidade da
+etapa de avaliação.
 
 Cada exemplo possui `context`, `target_inst`, `injected_task`, `target_task_answer`, `injected_task_answer` e `category`.
 
-`category` é metadado e permanece em inglês. `injected_task_answer` está vazio nos dados de origem e não é traduzido.
+`category` é metadado e permanece em inglês. `injected_task_answer` é vazio na
+maioria dos datasets, mas é traduzido quando estiver preenchido.
+
+## Datasets de Corrupção de Conhecimento
+
+Nos datasets `*_knowledge_corruption`, `injected_task` costuma ficar vazio e
+`injected_task_answer` contém a resposta incorreta que representa o ataque. Por
+isso, os dois campos de resposta são traduzidos: `target_task_answer` continua
+representando a resposta correta, enquanto `injected_task_answer` representa a
+resposta induzida pelo ataque.
+
+Antes de executar a avaliação original desses datasets com `substring_match`,
+revise os dois campos de resposta no idioma-alvo. Cada um precisa preservar o
+fato correspondente e usar uma forma compatível com a resposta esperada do
+modelo. Eles não devem ser iguais entre si; são gabaritos para resultados
+distintos. A adaptação ou normalização posterior da métrica pertence à etapa de
+avaliação, não a este pipeline de tradução.
 
 ## Comandos
 

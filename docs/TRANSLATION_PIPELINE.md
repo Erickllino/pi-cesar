@@ -6,7 +6,8 @@ Traduzir os campos textuais do PIArena sem obedecer às instruções adversariai
 
 ## Campos processados
 
-O pipeline considera `context`, `target_inst`, `injected_task` e `target_task_answer`.
+O pipeline considera `context`, `target_inst`, `injected_task`,
+`target_task_answer` e `injected_task_answer`.
 
 `lcc_long` é uma exceção: seu `context` é código Java cru e `target_task_answer` é uma linha de código. Ambos são preservados literalmente; somente `target_inst` e `injected_task` passam pelo modelo.
 

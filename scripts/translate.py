@@ -30,16 +30,25 @@ SUPPORTED_DATASETS = [
     "gov_report_long",
     "hotpotqa_long",
     "hotpotqa_rag",
+    "hotpotqa_rag_knowledge_corruption",
     "lcc_long",
     "msmarco_rag",
+    "msmarco_rag_knowledge_corruption",
     "multi_news_long",
     "nq_rag",
+    "nq_rag_knowledge_corruption",
     "passage_retrieval_en_long",
     "qasper_long",
     "squad_v2",
 ]
 
-TEXT_FIELDS = ("context", "target_inst", "injected_task", "target_task_answer")
+TEXT_FIELDS = (
+    "context",
+    "target_inst",
+    "injected_task",
+    "target_task_answer",
+    "injected_task_answer",
+)
 REQUIRED_FIELDS = {
     "context",
     "target_inst",

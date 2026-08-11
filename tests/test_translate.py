@@ -26,6 +26,14 @@ class TranslationStructureTests(unittest.TestCase):
         self.assertFalse(TRANSLATOR.should_translate("lcc_long", "target_task_answer"))
         self.assertTrue(TRANSLATOR.should_translate("lcc_long", "target_inst"))
         self.assertTrue(TRANSLATOR.should_translate("squad_v2", "context"))
+        self.assertTrue(
+            TRANSLATOR.should_translate("hotpotqa_rag_knowledge_corruption", "injected_task_answer")
+        )
+
+    def test_all_source_datasets_are_supported(self) -> None:
+        self.assertIn("hotpotqa_rag_knowledge_corruption", TRANSLATOR.SUPPORTED_DATASETS)
+        self.assertIn("msmarco_rag_knowledge_corruption", TRANSLATOR.SUPPORTED_DATASETS)
+        self.assertIn("nq_rag_knowledge_corruption", TRANSLATOR.SUPPORTED_DATASETS)
 
     def test_url_change_is_rejected(self) -> None:
         with self.assertRaises(TRANSLATOR.UrlStructureError):
