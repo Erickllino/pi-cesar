@@ -28,7 +28,8 @@ As funções principais de `scripts/translate.py` são:
 - `validate_structure()`: confirma que código e URLs são idênticos aos da origem depois da tradução.
 - `unexpected_added_chars()`: detecta aumento de caracteres CJK, cirílicos ou árabes quando esses scripts não são esperados no idioma de destino.
 - `translate_field()`: executa chamada ao modelo, retry, validações e fallback para o texto original se o campo continuar inválido.
-- `translate_dataset()`: percorre o JSON, mantém o checkpoint, grava warnings e mostra o resumo de cada dataset.
+- `translate_row()`: traduz um registro sem gravar em disco, permitindo execução paralela sem concorrência sobre os arquivos de saída.
+- `translate_dataset()`: agenda registros com `--concurrency`, confirma resultados na ordem original, mantém o checkpoint, grava warnings e mostra o resumo de cada dataset.
 
 ## Preservação e validação
 
@@ -52,6 +53,11 @@ O pipeline retoma automaticamente checkpoints existentes. Para refazer uma
 execução, remova a saída correspondente ou use outro `--output-dir`. Ao final
 de cada dataset, o script mostra registros processados, número de fallbacks,
 linhas afetadas e a contagem de warnings por tipo.
+
+`--concurrency` controla quantos registros podem estar em tradução ao mesmo
+tempo; o padrão é `1`. Mesmo em paralelo, checkpoint e warnings são gravados
+somente pelo processo principal e na ordem do dataset. Isso preserva os índices
+e permite retomar a execução normalmente.
 
 ## Limitações
 

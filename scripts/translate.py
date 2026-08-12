@@ -13,6 +13,7 @@ import os
 import re
 import time
 from collections import Counter
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -328,8 +329,7 @@ def clear_dataset_warnings(output_dir: Path, language_code: str, dataset: str) -
     save_warnings(output_dir, language_code, warnings)
 
 
-def add_warning(
-    output_dir: Path,
+def build_warning(
     language_code: str,
     *,
     dataset: str,
@@ -339,7 +339,7 @@ def add_warning(
     reason: str,
     original: str,
     added_characters: dict[str, dict[str, int]] | None = None,
-) -> None:
+) -> dict[str, Any]:
     warning: dict[str, Any] = {
         "type": warning_type,
         "dataset": dataset,
@@ -351,9 +351,7 @@ def add_warning(
     }
     if added_characters:
         warning["added_characters"] = added_characters
-    warnings = load_warnings(output_dir, language_code)
-    warnings.append(warning)
-    save_warnings(output_dir, language_code, warnings)
+    return warning
 
 
 FALLBACK_WARNING_TYPES = {
@@ -505,6 +503,77 @@ def translate_field(
     return source, "translation_error", last_reason or "falha desconhecida", None
 
 
+def translate_row(
+    client: OpenAI,
+    model: str,
+    *,
+    dataset: str,
+    row_index: int,
+    row: dict[str, Any],
+    language_code: str,
+    system_prompt: str,
+    fewshot: list[dict[str, str]],
+    max_tokens: int | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Traduz um registro sem escrever em disco.
+
+    Esta funcao pode rodar em paralelo. O processo principal recebe o resultado
+    e grava checkpoint e warnings na ordem original, evitando JSON concorrente
+    e mantendo os indices do dataset estaveis.
+    """
+    missing = REQUIRED_FIELDS - set(row)
+    if missing:
+        raise KeyError(f"{dataset}[{row_index}] sem campos obrigatorios: {sorted(missing)}")
+
+    result = dict(row)
+    warnings: list[dict[str, Any]] = []
+    for field in TEXT_FIELDS:
+        if not should_translate(dataset, field):
+            continue
+
+        original = row[field]
+        if not isinstance(original, str):
+            raise TypeError(f"{dataset}[{row_index}].{field} deve ser string")
+
+        value, fallback_type, reason, added = translate_field(
+            client,
+            model,
+            source=original,
+            language_code=language_code,
+            system_prompt=system_prompt,
+            fewshot=fewshot,
+            max_tokens=max_tokens,
+        )
+        result[field] = value
+
+        if fallback_type:
+            warnings.append(
+                build_warning(
+                    language_code,
+                    dataset=dataset,
+                    row_index=row_index,
+                    field=field,
+                    warning_type=fallback_type,
+                    reason=reason or fallback_type,
+                    original=original,
+                    added_characters=added,
+                )
+            )
+        elif len(original.strip()) >= 100 and len(value.strip()) < len(original.strip()) * 0.20:
+            warnings.append(
+                build_warning(
+                    language_code,
+                    dataset=dataset,
+                    row_index=row_index,
+                    field=field,
+                    warning_type="length_outlier",
+                    reason="traducao possui menos de 20% do tamanho da origem",
+                    original=original,
+                )
+            )
+    return result, warnings
+
+
 def should_translate(dataset: str, field: str) -> bool:
     if field not in TEXT_FIELDS:
         return False
@@ -520,6 +589,7 @@ def translate_dataset(
     output_dir: Path,
     limit: int | None,
     max_tokens: int | None,
+    concurrency: int,
 ) -> None:
     """Traduz um dataset JSON mantendo checkpoint por registro concluído.
 
@@ -551,61 +621,46 @@ def translate_dataset(
     system_prompt = build_system_prompt(LANGUAGES[language_code]["name"])
     fewshot = build_fewshot(language_code)
 
-    for index in range(start, len(source)):
-        row = source[index]
-        missing = REQUIRED_FIELDS - set(row)
-        if missing:
-            raise KeyError(f"{dataset}[{index}] sem campos obrigatorios: {sorted(missing)}")
+    def submit(executor: ThreadPoolExecutor, index: int) -> Future[tuple[dict[str, Any], list[dict[str, Any]]]]:
+        return executor.submit(
+            translate_row,
+            client,
+            model,
+            dataset=dataset,
+            row_index=index,
+            row=source[index],
+            language_code=language_code,
+            system_prompt=system_prompt,
+            fewshot=fewshot,
+            max_tokens=max_tokens,
+        )
 
-        result = dict(row)
-        for field in TEXT_FIELDS:
-            if not should_translate(dataset, field):
-                continue
+    pending: dict[int, Future[tuple[dict[str, Any], list[dict[str, Any]]]]] = {}
+    next_submit = start
+    next_commit = start
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        while next_submit < len(source) and len(pending) < concurrency:
+            pending[next_submit] = submit(executor, next_submit)
+            next_submit += 1
 
-            original = row[field]
-            if not isinstance(original, str):
-                raise TypeError(f"{dataset}[{index}].{field} deve ser string")
+        while pending:
+            result, row_warnings = pending.pop(next_commit).result()
+            translated.append(result)
+            if row_warnings:
+                warnings = load_warnings(output_dir, language_code)
+                warnings.extend(row_warnings)
+                save_warnings(output_dir, language_code, warnings)
 
-            value, fallback_type, reason, added = translate_field(
-                client,
-                model,
-                source=original,
-                language_code=language_code,
-                system_prompt=system_prompt,
-                fewshot=fewshot,
-                max_tokens=max_tokens,
-            )
-            result[field] = value
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(translated, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"[{dataset}] {next_commit + 1}/{len(source)}")
+            next_commit += 1
 
-            if fallback_type:
-                add_warning(
-                    output_dir,
-                    language_code,
-                    dataset=dataset,
-                    row_index=index,
-                    field=field,
-                    warning_type=fallback_type,
-                    reason=reason or fallback_type,
-                    original=original,
-                    added_characters=added,
-                )
-            elif len(original.strip()) >= 100 and len(value.strip()) < len(original.strip()) * 0.20:
-                add_warning(
-                    output_dir,
-                    language_code,
-                    dataset=dataset,
-                    row_index=index,
-                    field=field,
-                    warning_type="length_outlier",
-                    reason="traducao possui menos de 20% do tamanho da origem",
-                    original=original,
-                )
-
-        translated.append(result)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(translated, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"[{dataset}] {index + 1}/{len(source)}")
-        time.sleep(0.05)
+            if next_submit < len(source):
+                pending[next_submit] = submit(executor, next_submit)
+                next_submit += 1
+            if concurrency == 1:
+                time.sleep(0.05)
 
     print_dataset_summary(output_dir, language_code, dataset, len(translated))
 
@@ -630,12 +685,20 @@ def parse_args() -> argparse.Namespace:
         default=120.0,
         help="Tempo maximo, em segundos, por chamada da API",
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="Registros traduzidos em paralelo; mantenha 1 para Ollama local",
+    )
     parser.add_argument("--output-dir", type=Path, default=None, help="Diretorio de saida alternativo")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.concurrency < 1:
+        raise ValueError("--concurrency deve ser maior ou igual a 1")
     api_key = args.api_key or os.environ.get("OPENAI_API_KEY")
     if args.base_url:
         api_key = api_key or "ollama"
@@ -661,6 +724,7 @@ def main() -> None:
             output_dir=output_dir,
             limit=args.limit,
             max_tokens=args.max_tokens,
+            concurrency=args.concurrency,
         )
 
     print(f"\nTraducao concluida: {output_dir}")

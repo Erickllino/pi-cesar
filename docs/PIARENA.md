@@ -63,6 +63,22 @@ python scripts\translate.py ^
 
 Use `--model` apenas quando quiser trocar o modelo padrão `gpt-4o`.
 
+### Paralelismo
+
+O padrão é `--concurrency 1`, portanto uma execução local com Ollama continua
+sequencial. Em uma API ou servidor vLLM com capacidade para múltiplas requisições,
+é possível traduzir registros em paralelo:
+
+```cmd
+python scripts\translate.py ^
+  --language de ^
+  --concurrency 8
+```
+
+Comece com `--concurrency 4` ou `8` e ajuste conforme os limites de taxa, memória
+e estabilidade do servidor. Para Ollama local, mantenha `1`. Nos datasets `_long`,
+prefira uma concorrência menor, como `2` ou `4`.
+
 Teste local com Ollama:
 
 ```cmd
