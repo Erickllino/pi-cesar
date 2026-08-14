@@ -472,10 +472,8 @@ def do_notinject(tr: Translator, src_dir: Path, out_dir: Path, reports: list) ->
         df_out["word_list"] = [[resolve(wrec, str(w)) for w in wl] for wl in df["word_list"]]
         df_out["category"] = [CATEGORY_MAP.get(c, c) for c in df["category"]]
 
-        path = out_dir / f"{split}_pt_br.parquet"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        df_out.to_parquet(path, index=False)
-        print(f"  → {path}")
+        # Mesmo shape da entrada (prompt/word_list/category), mesmo nome.
+        _save_json(df_out.to_dict("records"), out_dir / f"{split}.json")
         reports.append(audit(list(zip(prompts, df_out["prompt"].tolist())), split))
 
 
@@ -485,7 +483,7 @@ def do_wildguard(tr: Translator, src_dir: Path, out_dir: Path, reports: list) ->
     prompts = [s["prompt"] for s in source]
     rec = tr.translate_all(prompts, BENIGN_SYSTEM_PROMPT)
     out = [{"prompt": resolve(rec, s["prompt"]), "label": s["label"]} for s in source]
-    _save_json(out, out_dir / "wildguard_pt_br.json")
+    _save_json(out, out_dir / "wildguard.json")
     reports.append(audit([(s["prompt"], o["prompt"]) for s, o in zip(source, out)], "wildguard"))
 
 
@@ -495,7 +493,7 @@ def do_bipia(tr: Translator, src_dir: Path, out_dir: Path, name: str, reports: l
     flat = [s for cat in source for s in source[cat]]
     rec = tr.translate_all(flat, INJECTION_SYSTEM_PROMPT)
     out = {cat: [resolve(rec, s) for s in samples] for cat, samples in source.items()}
-    _save_json(out, out_dir / f"{name}_pt_br.json")
+    _save_json(out, out_dir / f"{name}.json")
     pairs = [(s, resolve(rec, s)) for s in flat]
     reports.append(audit(pairs, name))
 
@@ -507,23 +505,8 @@ def do_injections(tr: Translator, src_dir: Path, out_dir: Path, reports: list) -
     prompts = [s["prompt"] for s in inj]
     rec = tr.translate_all(prompts, INJECTION_SYSTEM_PROMPT)
     out = [{"prompt": resolve(rec, p), "label": 1} for p in prompts]
-    _save_json(out, out_dir / "injections_pt_br.json")
+    _save_json(out, out_dir / "injections.json")
     reports.append(audit([(p, o["prompt"]) for p, o in zip(prompts, out)], "injections"))
-
-
-def copy_to_eval_dir(out_dir: Path) -> None:
-    eval_dir = out_dir / "eval"
-    eval_dir.mkdir(parents=True, exist_ok=True)
-    for src_name, dst_name in [
-        ("wildguard_pt_br.json", "wildguard.json"),
-        ("BIPIA_text_pt_br.json", "BIPIA_text.json"),
-        ("BIPIA_code_pt_br.json", "BIPIA_code.json"),
-    ]:
-        src = out_dir / src_name
-        if src.exists():
-            (eval_dir / dst_name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-            print(f"  {src_name} → {eval_dir / dst_name}")
-    # NotInject fica em parquet; convert_to_piguard.py faz a conversão.
 
 
 # --------------------------------------------------------------------------- #
@@ -592,6 +575,14 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
+    # A saída usa os mesmos nomes de arquivo da entrada; apontar os dois para o
+    # mesmo lugar sobrescreveria os originais em inglês.
+    if src_dir.resolve() == out_dir.resolve():
+        print(f"ERRO: --output-dir é igual a --source-dir ({src_dir.resolve()}).\n"
+              f"      Isso sobrescreveria os originais em inglês. Use outro diretório.",
+              file=sys.stderr)
+        return 1
+
     # Um servidor local (vLLM) não usa chave; só a API da OpenAI exige.
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key and not args.dry_run and not args.base_url:
@@ -617,8 +608,6 @@ def main() -> int:
         do_bipia(tr, src_dir, out_dir, "BIPIA_code", reports)
     if "injections" in args.datasets:
         do_injections(tr, src_dir, out_dir, reports)
-
-    copy_to_eval_dir(out_dir)
 
     quarantined = [r for r in tr.cache.values() if r.get("status") != "ok"]
     _save_json([{"src": r["src"], "reason": r.get("reason"), "rejected": r.get("rejected")}
