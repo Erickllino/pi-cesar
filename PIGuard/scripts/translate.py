@@ -443,10 +443,20 @@ def _save_json(obj, path: Path) -> None:
     print(f"  → {path}")
 
 
-def do_notinject(tr: Translator, out_dir: Path, reports: list) -> None:
+def do_notinject(tr: Translator, src_dir: Path, out_dir: Path, reports: list) -> None:
     for split, remote in NOTINJECT_SPLITS.items():
         print(f"\n=== NotInject: {split} ===")
-        df = pd.read_parquet("hf://datasets/leolee99/NotInject/" + remote)
+        # Prefere o JSON local (mesmas colunas do parquet do HF: prompt,
+        # word_list, category). Sem isto o job precisa de saída de rede para o
+        # huggingface.co, e o NotInject é o primeiro dataset da fila — num nó
+        # sem egress o run inteiro morre antes de traduzir qualquer coisa.
+        local = src_dir / f"{split}.json"
+        if local.exists():
+            df = pd.DataFrame(json.loads(local.read_text(encoding="utf-8")))
+            print(f"  origem local: {local}")
+        else:
+            df = pd.read_parquet("hf://datasets/leolee99/NotInject/" + remote)
+            print(f"  origem: hf://datasets/leolee99/NotInject (baixando)")
 
         prompts = df["prompt"].tolist()
         # Palavras traduzidas uma a uma pelo mesmo cache. A versão anterior
@@ -563,7 +573,11 @@ def main() -> int:
                         help="Usa apenas o cache; não chama a API")
     args = parser.parse_args()
 
-    out_dir = Path(args.output_dir) if args.output_dir else DEFAULT_OUTPUT_ROOT / args.model
+    # Ids de modelo do HF trazem "/" (Qwen/Qwen2.5-72B-Instruct-AWQ); sem isto o
+    # diretório de saída vira uma árvore aninhada e o convert_to_piguard.py não
+    # acha mais o --model. Mesma normalização de translate_train.py.
+    model_slug = args.model.replace("/", "__")
+    out_dir = Path(args.output_dir) if args.output_dir else DEFAULT_OUTPUT_ROOT / model_slug
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if args.audit_only:
@@ -578,9 +592,11 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
+    # Um servidor local (vLLM) não usa chave; só a API da OpenAI exige.
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key and not args.dry_run:
-        print("ERRO: defina OPENAI_API_KEY (ou use --dry-run).", file=sys.stderr)
+    if not api_key and not args.dry_run and not args.base_url:
+        print("ERRO: defina OPENAI_API_KEY, ou passe --base-url para um servidor "
+              "local (vLLM), ou use --dry-run.", file=sys.stderr)
         return 1
 
     client = OpenAI(api_key=api_key or "EMPTY", base_url=args.base_url,
@@ -593,7 +609,7 @@ def main() -> int:
 
     reports: list = []
     if "notinject" in args.datasets:
-        do_notinject(tr, out_dir, reports)
+        do_notinject(tr, src_dir, out_dir, reports)
     if "wildguard" in args.datasets:
         do_wildguard(tr, src_dir, out_dir, reports)
     if "bipia" in args.datasets:
