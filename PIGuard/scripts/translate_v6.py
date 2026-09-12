@@ -9,28 +9,11 @@ from pathlib import Path
 import pandas as pd
 from openai import OpenAI
 
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 MODEL = "gpt-4o"  # substituído por --model em runtime
 
 ROOT = Path(__file__).parent.parent
 PROJECT_ROOT = ROOT.parent
-
-
-def _load_env_file(path: Path) -> None:
-    if not path.exists():
-        return
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key = key.strip()
-        val = val.strip().strip('"').strip("'")
-        os.environ.setdefault(key, val)
-
-
-_load_env_file(PROJECT_ROOT / ".env")
-
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 DATA_DIR = PROJECT_ROOT / "Data" / "PIGuard"
 DS_EN = DATA_DIR / "Original"
 
@@ -107,6 +90,23 @@ UNEXPECTED_SCRIPTS = {
     "de": {"arabic", "cjk", "cyrillic"},
     # URLs, nomes e termos tecnicos em Latin sao legitimos em arabe.
     "ar": {"cjk", "cyrillic"},
+}
+
+# Prompts integralmente em outro idioma. Estes exemplos compoem a categoria
+# Multilingual do NotInject e devem permanecer idênticos ao benchmark original.
+FOREIGN_ONLY_ROWS = {
+    "NotInject_one": {
+        1, 4, 15, 16, 19, 20, 23, 24, 27, 28, 33, 37, 42, 51, 52, 55,
+        57, 61, 66, 72, 77, 85, 86, 95, 96,
+    },
+    "NotInject_two": {
+        1, 3, 4, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 27, 28,
+        33, 37, 38, 42, 51, 52, 55, 57, 61, 66, 77, 85, 86, 95, 96,
+    },
+    "NotInject_three": {
+        1, 3, 4, 10, 11, 15, 16, 17, 18, 19, 20, 23, 24, 27, 28, 33,
+        37, 38, 42, 51, 55, 57, 61, 66, 77, 85, 86, 95, 96,
+    },
 }
 
 
@@ -362,6 +362,20 @@ def build_user_message(text: str) -> str:
     )
 
 
+def is_literal_notinject_token(token: object) -> bool:
+    """Tokens sem letras ASCII sao simbolos ou escrita estrangeira a preservar."""
+    return not any(char.isascii() and char.isalpha() for char in str(token))
+
+
+def build_literal_token_system_prompt() -> str:
+    return (
+        INJECTION_SYSTEM_PROMPT
+        + " Preserve literalmente quaisquer simbolos, emojis, glifos e caracteres "
+        "estrangeiros explicitamente citados no texto, sem traduzi-los, translitera-los "
+        "ou remove-los."
+    )
+
+
 FEWSHOT = build_fewshot()
 
 
@@ -373,35 +387,6 @@ def configure_language(code: str, name: str, category_map: dict) -> None:
     CATEGORY_MAP = category_map
     INJECTION_SYSTEM_PROMPT = build_injection_system_prompt()
     FEWSHOT = build_fewshot()
-
-
-def _translate_word_list_legacy(client: OpenAI, model: str, word_list: list) -> list:
-    if not word_list:
-        return word_list
-
-    translated = []
-    for i in range(0, len(word_list), WORD_BATCH_SIZE):
-        batch = word_list[i : i + WORD_BATCH_SIZE]
-        words_str = ", ".join(str(w) for w in batch)
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        f"Você é um tradutor especializado. Traduza cada palavra/expressão da lista para o {LANGUAGE_NAME}. "
-                        "Retorne APENAS as palavras traduzidas separadas por vírgula, na mesma ordem, sem explicações."
-                    ),
-                },
-                {"role": "user", "content": words_str},
-            ],
-            temperature=0.0,
-        )
-        result = response.choices[0].message.content.strip()
-        translated.extend([w.strip() for w in result.split(",")])
-        time.sleep(0.2)
-
-    return translated
 
 
 def script_for_char(char: str) -> str | None:
@@ -439,7 +424,7 @@ def unexpected_added_chars(source_text: str, translated_text: str) -> dict[str, 
 
 
 def _warnings_path(output_dir: str) -> Path:
-    return Path(output_dir) / f"translation_warnings_v5_{LANGUAGE_CODE}.json"
+    return Path(output_dir) / f"translation_warnings_v6_{LANGUAGE_CODE}.json"
 
 
 def _load_warnings(output_dir: str) -> list[dict]:
@@ -451,8 +436,7 @@ def _save_warnings(output_dir: str, warnings: list[dict]) -> None:
     path = _warnings_path(output_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        # default=str: valores vindos do pandas sao numpy.int64, nao serializaveis
-        json.dumps(warnings, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        json.dumps(warnings, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
 
@@ -610,71 +594,106 @@ def parse_word_list_response(response_text: str, expected_count: int) -> list[st
     return [item.strip() for item in parsed]
 
 
+def add_word_list_alignment_warning(
+    output_dir: str,
+    split_name: str,
+    row_index: int,
+    missing_tokens: list[str],
+    translated_prompt: str,
+) -> None:
+    """Registra itens da word_list que nao ocorrem no prompt final."""
+    warnings = _load_warnings(output_dir)
+    warnings.append(
+        {
+            "type": "word_list_not_in_prompt",
+            "dataset": "NotInject",
+            "split": split_name,
+            "row_index": row_index,
+            "missing_tokens": missing_tokens,
+            "translated_prompt": translated_prompt,
+        }
+    )
+    _save_warnings(output_dir, warnings)
+
+
 def translate_word_list(
     client: OpenAI,
     model: str,
     word_list: list,
     *,
+    source_prompt: str,
+    translated_prompt: str,
     output_dir: str,
     split_name: str,
     row_index: int,
 ) -> list:
-    """Mantem a correspondencia um-para-um entre cada termo e sua traducao."""
+    """Traduz somente termos ASCII, usando o prompt final como contexto."""
     if not word_list:
         return word_list
 
-    translated = []
-    for batch_index, start in enumerate(range(0, len(word_list), WORD_BATCH_SIZE)):
-        batch = word_list[start : start + WORD_BATCH_SIZE]
-        request = json.dumps([str(item) for item in batch], ensure_ascii=False)
-        last_reason = ""
+    translated = [str(item) for item in word_list]
+    translatable_indexes = [
+        index for index, item in enumerate(word_list)
+        if not is_literal_notinject_token(item)
+    ]
+    if not translatable_indexes:
+        return translated
 
-        for attempt in range(2):
-            retry_note = ""
-            if attempt:
-                retry_note = (
-                    f" A resposta anterior foi invalida: {last_reason}. "
-                    f"Retorne exatamente {len(batch)} strings no array JSON."
-                )
-
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            f"Traduza cada item para {LANGUAGE_NAME}. Retorne SOMENTE um array JSON "
-                            f"com exatamente {len(batch)} strings, na mesma ordem, sem markdown nem explicacoes."
-                        ),
-                    },
-                    {"role": "user", "content": request + retry_note},
-                ],
-                temperature=0.0,
+    source_terms = [str(word_list[index]) for index in translatable_indexes]
+    request = json.dumps(
+        {
+            "source_prompt": source_prompt,
+            "translated_prompt": translated_prompt,
+            "terms": source_terms,
+        },
+        ensure_ascii=False,
+    )
+    last_reason = ""
+    for attempt in range(2):
+        retry_note = ""
+        if attempt:
+            retry_note = f" Previous response was invalid: {last_reason}."
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"Translate each item in terms to {LANGUAGE_NAME}. Use source_prompt and "
+                        "translated_prompt as context. Each returned item must be an exact substring "
+                        "of translated_prompt. Return ONLY a JSON array with the same number of "
+                        "strings as terms, in order, without markdown or explanation."
+                    ),
+                },
+                {"role": "user", "content": request + retry_note},
+            ],
+            temperature=0.0,
+        )
+        try:
+            parsed = parse_word_list_response(
+                response.choices[0].message.content.strip(), len(source_terms)
             )
-            result = response.choices[0].message.content.strip()
-            try:
-                parsed = parse_word_list_response(result, len(batch))
-                for offset, (source_item, translated_item) in enumerate(zip(batch, parsed)):
-                    add_unexpected_script_warning(
-                        output_dir=output_dir,
-                        dataset="NotInject",
-                        split_name=split_name,
-                        field="word_list",
-                        row_index=row_index,
-                        word_index=start + offset,
-                        source_text=str(source_item),
-                        translated_text=translated_item,
-                    )
-                translated.extend(parsed)
-                break
-            except (ValueError, json.JSONDecodeError) as exc:
-                last_reason = str(exc)
-        else:
-            translated.extend(batch)
-            add_word_list_warning(output_dir, split_name, row_index, batch_index, batch, last_reason)
+            for index, source_item, translated_item in zip(translatable_indexes, source_terms, parsed):
+                translated[index] = translated_item
+                add_unexpected_script_warning(
+                    output_dir=output_dir,
+                    dataset="NotInject",
+                    split_name=split_name,
+                    field="word_list",
+                    row_index=row_index,
+                    word_index=index,
+                    source_text=source_item,
+                    translated_text=translated_item,
+                )
+            break
+        except (ValueError, json.JSONDecodeError) as exc:
+            last_reason = str(exc)
+    else:
+        add_word_list_warning(
+            output_dir, split_name, row_index, 0, source_terms, last_reason
+        )
 
-        time.sleep(0.2)
-
+    time.sleep(0.2)
     return translated
 
 
@@ -700,26 +719,48 @@ def translate_split(split_name: str, client: OpenAI, model: str, output_dir: str
         row = df_orig.iloc[i]
         print(f"  [{i+1}/{total}] Traduzindo...", end=" ", flush=True)
 
-        prompt_translated = translate_text(
-            client,
-            model,
-            row["prompt"],
-            warning_context={
-                "output_dir": output_dir,
-                "dataset": "NotInject",
-                "split_name": split_name,
-                "field": "prompt",
-                "row_index": i,
-            },
-        )
-        word_list_translated = translate_word_list(
-            client,
-            model,
-            list(row["word_list"]),
-            output_dir=output_dir,
-            split_name=split_name,
-            row_index=i,
-        )
+        word_list = list(row["word_list"])
+        if i in FOREIGN_ONLY_ROWS[split_name]:
+            # Multilingual samples are benchmark inputs, not text to localize.
+            prompt_translated = row["prompt"]
+            word_list_translated = word_list
+        else:
+            system_prompt = (
+                build_literal_token_system_prompt()
+                if any(is_literal_notinject_token(token) for token in word_list)
+                else None
+            )
+            prompt_translated = translate_text(
+                client,
+                model,
+                row["prompt"],
+                system_prompt=system_prompt,
+                warning_context={
+                    "output_dir": output_dir,
+                    "dataset": "NotInject",
+                    "split_name": split_name,
+                    "field": "prompt",
+                    "row_index": i,
+                },
+            )
+            word_list_translated = translate_word_list(
+                client,
+                model,
+                word_list,
+                source_prompt=row["prompt"],
+                translated_prompt=prompt_translated,
+                output_dir=output_dir,
+                split_name=split_name,
+                row_index=i,
+            )
+
+            missing_tokens = [
+                token for token in word_list_translated if token not in prompt_translated
+            ]
+            if missing_tokens:
+                add_word_list_alignment_warning(
+                    output_dir, split_name, i, missing_tokens, prompt_translated
+                )
         category_translated = CATEGORY_MAP.get(row["category"], row["category"])
 
         new_row = row.to_dict()
@@ -931,7 +972,7 @@ def main():
 
     client = OpenAI(api_key=api_key, base_url=args.base_url) if args.base_url else OpenAI(api_key=api_key)
     output_dir = args.output_dir or str(
-        DATA_DIR / "Translated" / (args.model.replace("/", "__").replace(":", "_") + "_v5")
+        DATA_DIR / "Translated" / (args.model.replace("/", "__").replace(":", "_") + "_v6")
     )
     os.makedirs(output_dir, exist_ok=True)
 

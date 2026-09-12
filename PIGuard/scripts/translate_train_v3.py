@@ -36,6 +36,7 @@ HOST = "127.0.0.1"
 PORT = 8000
 VLLM_BASE_URL = f"http://{HOST}:{PORT}/v1"
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", "EMPTY").strip() or "EMPTY"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 CURRENT = "train"
 INPUT_PATH = PROJECT_ROOT / "Data" / "PIGuard" / "Original" / f"{CURRENT}.json"
 OUTPUT_DIR = PROJECT_ROOT / "Data" / "PIGuard" / "Translated"
@@ -456,7 +457,9 @@ def translate_dataset(client: OpenAI, model: str, output_path: Path,
             df_done = pd.concat([df_done, pd.DataFrame(new_rows)], ignore_index=True)
             df_done.to_json(output_path, orient="records", index=False)
             if warning_records:
-                warnings_path.write_text(json.dumps(warning_records, ensure_ascii=False, indent=2), encoding="utf-8")
+                # default=str: labels vindos do pandas sao numpy.int64, nao serializaveis
+                warnings_path.write_text(
+                    json.dumps(warning_records, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
             print(f"  -- checkpoint: {len(df_done)}/{total} salvos\n")
 
     print(f"\n  Concluído! Salvo em: {output_path}")
@@ -474,7 +477,11 @@ def main():
     parser.add_argument("--output-dir", default=None, help="Diretorio para separar modelo e idioma")
     parser.add_argument("--limit", type=int, default=None, help="Limita número de amostras (útil para teste)")
     parser.add_argument("--output", default=None, help="Caminho do json de saída")
-    parser.add_argument("--base-url", default=VLLM_BASE_URL, help=f"Base URL do vLLM (default: {VLLM_BASE_URL})")
+    parser.add_argument("--base-url", default=None,
+                        help=f"Base URL compatível com OpenAI; omita para usar a API oficial da OpenAI "
+                             f"ou passe o vLLM local ({VLLM_BASE_URL})")
+    parser.add_argument("--api-key", default=None,
+                        help="Chave da API; default: OPENAI_API_KEY (sem --base-url) ou VLLM_API_KEY (com --base-url)")
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY,
                         help=f"Requisições simultâneas (default: {DEFAULT_CONCURRENCY})")
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE,
@@ -497,8 +504,12 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = Path(args.output) if args.output else OUTPUT_DIR / f"{CURRENT}_{args.language}_{model_slug}.json"
 
+    api_key = args.api_key or (VLLM_API_KEY if args.base_url else OPENAI_API_KEY)
+    if not api_key:
+        raise ValueError("Defina OPENAI_API_KEY (ou use --api-key) antes de executar.")
+
     # timeout/max_retries dão resiliência a engasgos transitórios do servidor
-    client = OpenAI(api_key=VLLM_API_KEY, base_url=args.base_url, timeout=120.0, max_retries=3)
+    client = OpenAI(api_key=api_key, base_url=args.base_url, timeout=120.0, max_retries=3)
 
     translate_dataset(client, args.model, output_path, args.limit, args.concurrency, args.chunk_size)
 
