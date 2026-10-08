@@ -929,7 +929,7 @@ def main():
     elif not api_key:
         raise ValueError("Defina a variável de ambiente OPENAI_API_KEY antes de executar.")
 
-    client = OpenAI(api_key=api_key, base_url=args.base_url) if args.base_url else OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, base_url=args.base_url, timeout=7200.0, max_retries=1) if args.base_url else OpenAI(api_key=api_key, timeout=7200.0)
     output_dir = args.output_dir or str(
         DATA_DIR / "Translated" / (args.model.replace("/", "__").replace(":", "_") + "_v5")
     )

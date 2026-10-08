@@ -413,7 +413,7 @@ def translate_dataset(client: OpenAI, model: str, output_path: Path,
             for i in indices:
                 r = results[i]
                 row = r["row"]
-                label = row["label"]
+                label = int(row["label"])
                 source = row["source"]
                 pct = (i + 1) / total * 100
 
