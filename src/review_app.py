@@ -4,6 +4,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -112,7 +113,7 @@ class ReviewStore:
             rows = db.execute("SELECT prompt_id, verdict, categories, notes, updated_at FROM reviews").fetchall()
         return {row[0]: {"verdict": row[1], "categories": json.loads(row[2]), "notes": row[3], "updated_at": row[4]} for row in rows}
 
-    def save_review(self, prompt_id, verdict, categories, notes):
+    def prepare_review(self, prompt_id, verdict, categories, notes):
         if prompt_id not in self.prompt_ids:
             raise ValueError("Prompt não encontrado.")
         if verdict not in ("malicious", "non-malicious", "uncertain"):
@@ -128,9 +129,13 @@ class ReviewStore:
             categories = []
         review = {"verdict": verdict, "categories": list(dict.fromkeys(categories)), "notes": notes,
                   "updated_at": datetime.now(timezone.utc).isoformat()}
+        return review
+
+    def save_review(self, prompt_id, verdict, categories, notes):
+        review = self.prepare_review(prompt_id, verdict, categories, notes)
         with self.lock, self._connect() as db:
             db.execute("INSERT INTO reviews VALUES (?, ?, ?, ?, ?) ON CONFLICT(prompt_id) DO UPDATE SET verdict=excluded.verdict, categories=excluded.categories, notes=excluded.notes, updated_at=excluded.updated_at",
-                       (prompt_id, verdict, json.dumps(review["categories"], ensure_ascii=False), notes, review["updated_at"]))
+                       (prompt_id, review["verdict"], json.dumps(review["categories"], ensure_ascii=False), review["notes"], review["updated_at"]))
         return review
 
     def filtered(self, dataset="", status="", label="", search="", reviews=None):
@@ -251,6 +256,19 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": str(exc)}, 400)
 
 
+def create_stores(data_dir, db_dir, database_url=None):
+    """Use shared PostgreSQL when configured; otherwise keep local SQLite."""
+    if database_url:
+        from postgres_store import PostgresJudgeStore, PostgresReviewStore, initialize_database
+
+        initialize_database(database_url, DEFAULT_CATEGORIES)
+        store = PostgresReviewStore(data_dir, database_url)
+        return store, PostgresJudgeStore(database_url, store.prompts)
+    Path(db_dir).mkdir(parents=True, exist_ok=True)
+    store = ReviewStore(data_dir, db_dir)
+    return store, JudgeStore(db_dir, store.prompts)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Interface local de revisão de prompts")
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA)
@@ -260,9 +278,7 @@ def main():
     args = parser.parse_args()
     if not args.data_dir.is_dir():
         parser.error(f"Pasta não encontrada: {args.data_dir}")
-    args.db_dir.mkdir(parents=True, exist_ok=True)
-    Handler.store = ReviewStore(args.data_dir, args.db_dir)
-    Handler.judge_store = JudgeStore(args.db_dir, Handler.store.prompts)
+    Handler.store, Handler.judge_store = create_stores(args.data_dir, args.db_dir, os.environ.get("DATABASE_URL"))
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Revisando {len(Handler.store.prompts)} prompts em http://{args.host}:{args.port}", flush=True)
     try:
