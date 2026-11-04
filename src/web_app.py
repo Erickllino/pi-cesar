@@ -40,8 +40,8 @@ STATIC_FILES = {
 def create_app(store=None, judge_store=None, password=None, secret_key=None, secure_cookie=True):
     password = password if password is not None else os.environ.get("REVIEW_PASSWORD", "")
     secret_key = secret_key if secret_key is not None else os.environ.get("SESSION_SECRET", "")
-    if not isinstance(password, str) or len(password) < 16:
-        raise RuntimeError("Configure REVIEW_PASSWORD com pelo menos 16 caracteres antes de iniciar o site.")
+    if not isinstance(password, str) or len(password) < 8:
+        raise RuntimeError("Configure REVIEW_PASSWORD com pelo menos 8 caracteres antes de iniciar o site.")
     if not isinstance(secret_key, str) or len(secret_key) < 32:
         raise RuntimeError("Configure SESSION_SECRET com pelo menos 32 caracteres antes de iniciar o site.")
     if store is None or judge_store is None:

@@ -273,7 +273,7 @@ def main():
     parser = argparse.ArgumentParser(description="Interface local de revisão de prompts")
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA)
     parser.add_argument("--db-dir", type=Path, default=DEFAULT_DB)
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="127.0.0.0")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     if not args.data_dir.is_dir():

@@ -13,4 +13,4 @@ app = create_app()
 if __name__ == "__main__":
     # Local HTTP development only; production uses HTTPS and secure cookies.
     app.config["SESSION_COOKIE_SECURE"] = False
-    app.run(host="127.0.0.1", port=8765)
+    app.run(host="127.0.0.0", port=8765)
