@@ -1,100 +1,37 @@
-# PiGuard
+# PiGuard — revisão de prompts
 
-Pipeline de preparação e tradução dos datasets usados no treinamento e na avaliação do PiGuard.
+Interface de revisão humana dos prompts públicos do PiGuard. Os dados de origem ficam em `Data/*.json` (versionados); as avaliações humanas e os resultados históricos do Jev ficam em `db/*.sqlite3` (ignorados pelo Git). O juiz não pode ser executado pelo site.
 
 ## Estrutura
 
 ```text
-PIGuard/
-├── EDA.ipynb
-└── scripts/
-    ├── translate.py
-    ├── translate_train.py
-    ├── translate_train_v2.py
-    ├── translate_train_v3.py
-    ├── translate_v4.py
-    ├── translate_v5.py
-    ├── translate_v6.py
-    ├── convert_to_piguard.py
-    └── prepare_training.py
+Data/                 # JSONs públicos usados pela interface
+db/                   # SQLite local; nunca publicar no Git
+src/review_app.py     # servidor e API de revisão
+src/judge.py          # leitura dos resultados históricos do Jev
+src/comparison.py     # comparação entre rótulos
+src/review_static/    # páginas e arquivos estáticos
+src/test_*.py         # testes
 ```
 
-Os datasets não são versionados. Por padrão, os scripts leem e gravam em:
+## Uso local
 
-```text
-Data/PIGuard/
-├── Original/
-└── Translated/
-```
-
-## Instalação
-
-Requer Python 3.13 ou superior e, preferencialmente, [uv](https://docs.astral.sh/uv/).
+Requer Python 3.13 ou superior, sem dependências adicionais:
 
 ```bash
-uv sync
+python3 src/review_app.py
 ```
 
-Também é possível instalar com pip:
+Abra <http://127.0.0.1:8765>. Para usar outras pastas, passe `--data-dir` (JSONs) e `--db-dir` (bancos SQLite). Uma instalação nova cria os bancos locais em `db/` automaticamente; para manter as avaliações anteriores, copie os bancos antigos para `db/` **sem colocá-los no Git**.
+
+Na revisão, cada prompt tem um único veredito compartilhado: a última avaliação salva prevalece. Para BIPIA e NotInject sem campo `label`, o rótulo original é inferido pelo nome do arquivo (BIPIA = `1`/malicious; NotInject = `0`/non-malicious), sem modificar os JSONs ou preencher a revisão humana. A página `/compare` mostra resultados históricos do Jev, se `db/jev_reviews.sqlite3` estiver disponível. Rotas de execução do juiz e a página `/judge` não são disponibilizadas.
+
+Para rodar os testes:
 
 ```bash
-pip install -r requirements.txt
+PYTHONPATH=src python3 -m unittest discover -s src -p 'test_*.py'
 ```
 
-Crie um arquivo `.env` na raiz quando necessário:
+## Hospedagem
 
-```dotenv
-OPENAI_API_KEY=...
-VLLM_API_KEY=EMPTY
-```
-
-O arquivo `.env` e a pasta `Data/` são ignorados pelo Git.
-
-## Uso
-
-Consulte todas as opções de cada pipeline com `--help`:
-
-```bash
-uv run python PIGuard/scripts/translate.py --help
-uv run python PIGuard/scripts/translate_v5.py --help
-uv run python PIGuard/scripts/translate_train_v3.py --help
-```
-
-Exemplo usando a API da OpenAI:
-
-```bash
-uv run python PIGuard/scripts/translate.py --model gpt-4o
-```
-
-Exemplo traduzindo o conjunto de treino com um servidor vLLM compatível com a API da OpenAI:
-
-```bash
-uv run python PIGuard/scripts/translate_train_v3.py \
-  --model Qwen/Qwen2.5-72B-Instruct-AWQ \
-  --base-url http://127.0.0.1:8000/v1 \
-  --language pt_br
-```
-
-Use `--limit` e um diretório de saída separado antes de executar o pipeline completo.
-
-## Interface de revisão de prompts
-
-Para revisar os prompts dos arquivos JSON em `Data/`, inicie a interface local (sem dependências adicionais):
-
-```bash
-python PIGuard/review_app.py
-```
-
-Abra **http://127.0.0.1:8765** no navegador. É possível escolher outro diretório ou porta com `--data-dir` e `--port`.
-
-A interface permite filtrar por dataset, status, rótulo original (`0` = non-malicious; `1` = malicious) e texto; marcar **Malicious**, **Non-malicious** ou **Incerto**; selecionar múltiplas categorias de técnica; adicionar novas categorias e registrar observações. A catalogação original é apenas exibida, sem alteração. Para arquivos BIPIA e NotInject sem `label`, o rótulo original exibido é inferido do nome do dataset (BIPIA = `1`, NotInject = `0`); os JSONs não são modificados e isso não cria uma revisão humana. As avaliações e categorias personalizadas ficam em `Data/reviews.sqlite3` (ignorado pelo Git). O botão **Exportar CSV** gera um arquivo com as avaliações salvas, incluindo os metadados e o texto original de cada prompt. O CSV contém apenas prompts revisados. Há um veredito humano compartilhado por prompt; a última revisão salva prevalece.
-
-> A interface escuta apenas em `127.0.0.1` por padrão. Não a exponha na rede sem adicionar autenticação.
-
-### Comparar as três avaliações
-
-Abra **http://127.0.0.1:8765/compare** para ver, lado a lado, o prompt com seu rótulo/categoria/fonte originais, o resultado já salvo do Jev (probabilidades, confiança, técnicas e modelo) e a revisão humana (veredito, técnicas e observações). Filtre por dataset, rótulo, texto, divergências por par, avaliações ausentes e prompts com as três decisões. Os contadores de concordância e divergência total consideram apenas prompts com **três vereditos binários**; revisão manual `Incerto` e rótulos originais ausentes não são comparados como se fossem decisões binárias. A página é somente leitura e não chama a API da TypeSafe. A interface e as rotas para executar o juiz não são servidas.
-
-### Hospedagem
-
-Esta versão ainda usa SQLite local e arquivos em `Data/`; **não está pronta para implantação na Vercel**. Funções da Vercel não oferecem armazenamento SQLite persistente, e os datasets ignorados pelo Git não acompanham o deploy. Para uso compartilhado será necessário mover os prompts, as avaliações e os resultados históricos do Jev para armazenamento persistente externo, além de configurar autenticação e backups. Não publique o servidor local diretamente na internet sem essas adaptações.
+**Este servidor local ainda não está pronto para a Vercel.** Os JSONs públicos já podem acompanhar o código, mas as funções da Vercel não mantêm bancos SQLite persistentes entre execuções e o `ThreadingHTTPServer` precisa ser adaptado para o runtime de funções. Para uma revisão compartilhada online, é necessário um banco externo para avaliações humanas (e para resultados históricos do Jev, caso se queira manter a comparação), autenticação da equipe e backups externos a cada dois dias. Não publique `db/` nem segredos no Git e não exponha o servidor local diretamente na internet.

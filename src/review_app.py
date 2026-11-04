@@ -1,4 +1,4 @@
-"""Prompt-injection review UI. Run locally: python PIGuard/review_app.py"""
+"""Prompt-injection review UI. Run locally: python3 src/review_app.py"""
 
 import argparse
 import csv
@@ -19,6 +19,7 @@ from judge import JudgeStore
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DATA = ROOT / "Data"
+DEFAULT_DB = ROOT / "db"
 STATIC = Path(__file__).resolve().parent / "review_static"
 DEFAULT_CATEGORIES = [
     ("Sobrescrita de instruções", "Tenta substituir instruções ou prioridades existentes."),
@@ -69,11 +70,11 @@ def load_prompts(data_dir):
 
 
 class ReviewStore:
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, db_dir=None):
         self.prompts = load_prompts(data_dir)
         self.prompt_ids = {item["id"] for item in self.prompts}
         self.datasets = sorted({item["dataset"] for item in self.prompts})
-        self.db_path = Path(data_dir) / "reviews.sqlite3"
+        self.db_path = Path(db_dir if db_dir is not None else DEFAULT_DB) / "reviews.sqlite3"
         self.lock = Lock()
         with self._connect() as db:
             db.execute("CREATE TABLE IF NOT EXISTS reviews (prompt_id TEXT PRIMARY KEY, verdict TEXT NOT NULL, categories TEXT NOT NULL, notes TEXT NOT NULL, updated_at TEXT NOT NULL)")
@@ -253,13 +254,15 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description="Interface local de revisão de prompts")
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA)
+    parser.add_argument("--db-dir", type=Path, default=DEFAULT_DB)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     if not args.data_dir.is_dir():
         parser.error(f"Pasta não encontrada: {args.data_dir}")
-    Handler.store = ReviewStore(args.data_dir)
-    Handler.judge_store = JudgeStore(args.data_dir, Handler.store.prompts)
+    args.db_dir.mkdir(parents=True, exist_ok=True)
+    Handler.store = ReviewStore(args.data_dir, args.db_dir)
+    Handler.judge_store = JudgeStore(args.db_dir, Handler.store.prompts)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Revisando {len(Handler.store.prompts)} prompts em http://{args.host}:{args.port}", flush=True)
     try:
