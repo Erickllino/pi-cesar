@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PiGuard · Juiz IA</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/judge.css">
+    <script src="/judge.js" defer></script>
+</head>
+
+<body>
+    <header class="topbar">
+        <div class="brand"><span class="brand-icon">✳</span><span>PiGuard <span class="brand-separator">/</span> <span
+                    class="brand-sub">Juiz IA</span></span></div>
+        <div class="top-actions"><a class="export-link" href="/">← Revisão humana</a><a class="export-link" href="/compare">◈ Comparar</a><a class="export-link"
+                href="/api/judge/export">↓ Exportar avaliações IA</a></div>
+    </header>
+    <main class="shell">
+        <section class="intro">
+            <div>
+                <div class="eyebrow">ANÁLISE DE DATASETS <span>·</span> TYPESAFE JEV</div>
+                <h1>Avaliação automática<span class="heading-dot">.</span></h1>
+                <p>Jev classifica os prompts com probabilidades estruturadas. Os rótulos originais não são enviados ao
+                    modelo.</p>
+            </div>
+            <div class="progress-card">
+                <div class="progress-top"><span>PROGRESSO DO JUIZ</span><strong id="progress-percent">0%</strong></div>
+                <div class="progress-track">
+                    <div id="progress-bar"></div>
+                </div>
+                <div class="progress-caption"><span id="reviewed-count">0 avaliados</span><span id="total-count">0 no
+                        total</span></div>
+            </div>
+        </section>
+        <section class="metrics">
+            <div class="metric"><span>TOTAL DE PROMPTS</span><strong id="stat-total">—</strong><small>Em todos os
+                    datasets</small></div>
+            <div class="metric"><span>AVALIADOS PELA IA</span><strong id="stat-reviewed">—</strong><small>Separados da
+                    revisão humana</small></div>
+            <div class="metric"><span>MALICIOUS</span><strong id="stat-malicious">—</strong><small>Classificados pelo
+                    juiz</small></div>
+            <div class="metric"><span>NON-MALICIOUS</span><strong id="stat-benign">—</strong><small>Classificados pelo
+                    juiz</small></div>
+        </section>
+        <div class="judge-config">
+            <div><strong>✳ &nbsp; TypeSafe · Jev</strong>
+                <p id="key-status">Verificando a chave da API...</p>
+            </div><label>MODELO<input id="model" maxlength="100" placeholder="jev-latest" autocomplete="off"></label>
+            <div class="judge-actions"><button id="run-batch" class="batch-button" type="button">Avaliar próximos
+                    10</button><span>Até 10 chamadas pagas por lote. Itens já avaliados são ignorados.</span></div>
+        </div>
+        <div class="auto-panel">
+            <div><strong>↻ &nbsp; Avaliação automática da fila</strong>
+                <p>Usa o dataset e o rótulo selecionados abaixo; ignora os já avaliados. A busca textual não se aplica.
+                    Cada prompt pode gerar uma cobrança.</p>
+            </div><label>CHAMADAS MÁXIMAS<input id="auto-limit" type="number" min="1" max="80000"
+                    value="50"></label><button id="auto-start" class="save-button" type="button">Iniciar
+                automático</button><button id="auto-stop" class="batch-button" type="button" hidden>Pausar</button>
+            <div id="auto-progress" class="auto-progress" role="status" aria-live="polite">Nenhuma execução iniciada.
+            </div>
+        </div>
+        <p class="paper-note"><a href="https://aclanthology.org/2025.acl-long.1468/" target="_blank"
+                rel="noopener noreferrer">PiGuard · ACL 2025 ↗</a> Critério binário e atenção à sobredefesa no
+            NotInject. Jev é um avaliador externo: não reproduz o treinamento nem as métricas do artigo; ataques BIPIA
+            isolados podem ser ambíguos sem contexto.</p>
+        <section class="workspace">
+            <aside class="queue">
+                <div class="panel-head">
+                    <div><span class="eyebrow">EXPLORAR</span>
+                        <h2>Fila do juiz <span id="queue-count" class="count-pill">0</span></h2>
+                    </div>
+                </div>
+                <div class="filters"><label class="search-wrap"><span>⌕</span><input id="search"
+                            placeholder="Buscar no prompt ou fonte..." aria-label="Buscar prompts"></label>
+                    <div class="filter-row"><label><span>DATASET</span><select id="dataset">
+                                <option value="">Todos os datasets</option>
+                            </select></label><label><span>STATUS IA</span><select id="status">
+                                <option value="">Todos</option>
+                                <option value="pending">Não avaliados</option>
+                                <option value="reviewed">Avaliados</option>
+                                <option value="malicious">Malicious</option>
+                                <option value="non-malicious">Non-malicious</option>
+                                <option value="uncertain">Incerto</option>
+                            </select></label></div><label class="label-filter"><span>RÓTULO ORIGINAL</span><select
+                            id="label">
+                            <option value="">Qualquer rótulo</option>
+                            <option value="0">0 · Non-malicious</option>
+                            <option value="1">1 · Malicious</option>
+                        </select></label>
+                </div>
+                <div class="list-head"><span>PROMPTS</span><span id="list-range">—</span></div>
+                <div id="prompt-list" class="prompt-list"></div>
+                <div class="queue-footer"><button id="previous-page" class="page-button" type="button">←</button><span
+                        id="page-info">—</span><button id="next-page" class="page-button" type="button">→</button></div>
+            </aside>
+            <section class="detail">
+                <div id="detail-empty" class="empty-state"><span>✳</span>
+                    <h2>Selecione um prompt</h2>
+                    <p>Escolha um item para avaliá-lo com o juiz.</p>
+                </div>
+                <div id="detail-content" hidden>
+                    <div class="detail-header">
+                        <div><span class="eyebrow">AVALIAÇÃO INDEPENDENTE</span>
+                            <h2>Analisar prompt</h2>
+                        </div><span id="review-state" class="review-state">Não avaliado</span>
+                    </div>
+                    <div class="prompt-meta"><span id="prompt-dataset" class="dataset-tag"></span><span
+                            id="prompt-position"></span></div>
+                    <div id="prompt-text" class="prompt-text"></div>
+                    <div class="original-box">
+                        <div class="section-title"><span class="section-icon">◈</span>
+                            <div><strong>Catalogação original</strong><small>Visível apenas nesta interface; não enviada
+                                    ao juiz</small></div>
+                        </div>
+                        <div class="original-grid">
+                            <div><span>CLASSIFICAÇÃO</span><strong id="original-label">—</strong></div>
+                            <div><span>CATEGORIA / TEMA</span><strong id="original-category">—</strong></div>
+                            <div><span>FONTE</span><strong id="original-source">—</strong></div>
+                        </div>
+                    </div>
+                    <div id="judge-result" class="judge-result" hidden>
+                        <div class="section-title"><span class="section-icon purple">✳</span>
+                            <div><strong>Decisão do Jev</strong><small id="result-model">—</small></div>
+                        </div>
+                        <div class="result-summary"><span id="result-verdict" class="result-verdict"></span><span
+                                id="result-confidence"></span></div>
+                        <div class="result-label">PROBABILIDADES DO VEREDITO</div>
+                        <div id="result-probabilities" class="probability-list"></div>
+                        <div class="result-label">CATEGORIAS IDENTIFICADAS (PROBABILIDADE ≥ 50%)</div>
+                        <div id="result-categories" class="category-chips"></div>
+                        <p class="judge-disclaimer">Jev não produz justificativas em texto livre. Probabilidades não
+                            garantem acerto em casos individuais.</p>
+                    </div>
+                    <div id="no-result" class="review-section">
+                        <div class="section-title"><span class="section-icon purple">✳</span>
+                            <div><strong>Aguardando avaliação</strong><small>O juiz analisará o texto sem ver o rótulo
+                                    original.</small></div>
+                        </div>
+                    </div>
+                    <div class="detail-footer"><span id="run-status" role="status">O texto do prompt será enviado à API
+                            TypeSafe.</span><button id="run-single" class="save-button" type="button">Avaliar com Jev
+                            →</button></div>
+                </div>
+            </section>
+        </section>
+        <footer class="footer">PiGuard <span>·</span> TypeSafe Jev <span>·</span> Resultados salvos separadamente
+        </footer>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+
+</html>
