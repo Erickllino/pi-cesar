@@ -76,3 +76,25 @@ uv run python PIGuard/scripts/translate_train_v3.py \
 ```
 
 Use `--limit` e um diretório de saída separado antes de executar o pipeline completo.
+
+## Interface de revisão de prompts
+
+Para revisar os prompts dos arquivos JSON em `Data/`, inicie a interface local (sem dependências adicionais):
+
+```bash
+python PIGuard/review_app.py
+```
+
+Abra **http://127.0.0.1:8765** no navegador. É possível escolher outro diretório ou porta com `--data-dir` e `--port`.
+
+A interface permite filtrar por dataset, status, rótulo original (`0` = non-malicious; `1` = malicious) e texto; marcar **Malicious**, **Non-malicious** ou **Incerto**; selecionar múltiplas categorias de técnica; adicionar novas categorias e registrar observações. A catalogação original é apenas exibida, sem alteração. Para arquivos BIPIA e NotInject sem `label`, o rótulo original exibido é inferido do nome do dataset (BIPIA = `1`, NotInject = `0`); os JSONs não são modificados e isso não cria uma revisão humana. As avaliações e categorias personalizadas ficam em `Data/reviews.sqlite3` (ignorado pelo Git). O botão **Exportar CSV** gera um arquivo com as avaliações salvas, incluindo os metadados e o texto original de cada prompt. O CSV contém apenas prompts revisados. Há um veredito humano compartilhado por prompt; a última revisão salva prevalece.
+
+> A interface escuta apenas em `127.0.0.1` por padrão. Não a exponha na rede sem adicionar autenticação.
+
+### Comparar as três avaliações
+
+Abra **http://127.0.0.1:8765/compare** para ver, lado a lado, o prompt com seu rótulo/categoria/fonte originais, o resultado já salvo do Jev (probabilidades, confiança, técnicas e modelo) e a revisão humana (veredito, técnicas e observações). Filtre por dataset, rótulo, texto, divergências por par, avaliações ausentes e prompts com as três decisões. Os contadores de concordância e divergência total consideram apenas prompts com **três vereditos binários**; revisão manual `Incerto` e rótulos originais ausentes não são comparados como se fossem decisões binárias. A página é somente leitura e não chama a API da TypeSafe. A interface e as rotas para executar o juiz não são servidas.
+
+### Hospedagem
+
+Esta versão ainda usa SQLite local e arquivos em `Data/`; **não está pronta para implantação na Vercel**. Funções da Vercel não oferecem armazenamento SQLite persistente, e os datasets ignorados pelo Git não acompanham o deploy. Para uso compartilhado será necessário mover os prompts, as avaliações e os resultados históricos do Jev para armazenamento persistente externo, além de configurar autenticação e backups. Não publique o servidor local diretamente na internet sem essas adaptações.
