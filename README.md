@@ -7,7 +7,9 @@ Interface de revisão humana dos prompts públicos do PiGuard. Os dados de orige
 ```text
 Data/                 # JSONs públicos usados pela interface
 db/                   # SQLite local; nunca publicar no Git
-src/review_app.py     # servidor e API de revisão
+app.py                # entrada Flask usada pela Vercel
+src/web_app.py        # login e API protegida do site compartilhado
+src/review_app.py     # lógica de revisão e servidor local legado
 src/judge.py          # leitura dos resultados históricos do Jev
 src/comparison.py     # comparação entre rótulos
 src/review_static/    # páginas e arquivos estáticos
@@ -16,7 +18,7 @@ src/test_*.py         # testes
 
 ## Uso local
 
-Requer Python 3.13 ou superior. Instale a dependência PostgreSQL com `pip install -e .` (ou `uv sync`). Sem `DATABASE_URL`, o modo local usa apenas a biblioteca padrão e continua com SQLite:
+Requer Python 3.13 ou superior. Use `uv sync --python 3.13`. Sem `DATABASE_URL`, o servidor local legado usa SQLite:
 
 ```bash
 python3 src/review_app.py
@@ -25,6 +27,8 @@ python3 src/review_app.py
 Abra <http://127.0.0.1:8765>. Para usar outras pastas, passe `--data-dir` (JSONs) e `--db-dir` (bancos SQLite). Uma instalação nova cria os bancos locais em `db/` automaticamente; para manter as avaliações anteriores, copie os bancos antigos para `db/` **sem colocá-los no Git**.
 
 Na revisão, cada prompt tem um único veredito compartilhado: a última avaliação salva prevalece. Para BIPIA e NotInject sem campo `label`, o rótulo original é inferido pelo nome do arquivo (BIPIA = `1`/malicious; NotInject = `0`/non-malicious), sem modificar os JSONs ou preencher a revisão humana. A página `/compare` mostra resultados históricos do Jev, se `db/jev_reviews.sqlite3` estiver disponível. Rotas de execução do juiz e a página `/judge` não são disponibilizadas.
+
+**Não exponha `src/review_app.py` na internet:** esse servidor legado não exige senha. Para testar localmente a versão protegida, configure `DATABASE_URL`, `REVIEW_PASSWORD` e `SESSION_SECRET` em `.env` e rode `uv run --env-file .env python app.py` (abra <http://127.0.0.1:8765>). Nesse modo local apenas, o cookie pode trafegar por HTTP; na Vercel ele exige HTTPS.
 
 Para rodar os testes:
 
@@ -49,4 +53,12 @@ O importador só lê `db/reviews.sqlite3` e `db/jev_reviews.sqlite3`, insere ape
 
 ## Hospedagem
 
-**A integração do banco não é um deploy completo na Vercel.** Os JSONs públicos já acompanham o código e `DATABASE_URL` permite armazenamento compartilhado, mas `ThreadingHTTPServer` ainda precisa ser adaptado para funções da Vercel e é necessária autenticação para a equipe. Não publique `db/` nem segredos no Git e não exponha o servidor local diretamente na internet.
+O `app.py` na raiz é o ponto de entrada Flask detectado pela Vercel. Na Vercel, importe este repositório com **Root Directory `./`**, preset Python/Flask e escolha `feature/review-site-vercel` como branch de produção em **Project → Settings → Environments → Production → Branch Tracking**. Em **Project → Settings → Environment Variables**, defina para o ambiente Production:
+
+- `DATABASE_URL`: **connection string PostgreSQL com pool** copiada de **Neon → Connect**, começando com `postgresql://` (não é a URL HTTPS `/rest/v1`). A string do ambiente local não é enviada automaticamente à Vercel.
+- `REVIEW_PASSWORD`: senha forte compartilhada com a equipe, com pelo menos 16 caracteres.
+- `SESSION_SECRET`: segredo independente, aleatório, com pelo menos 32 caracteres. Gere um com `uv run python -c 'import secrets; print(secrets.token_urlsafe(48))'` no seu terminal.
+
+Não use o mesmo valor para senha e segredo; nunca cole esses valores no repositório, no chat ou em `vercel.json`. Se também usar deploys Preview, configure as variáveis para esse ambiente ou deixe os previews indisponíveis por padrão. **Depois de salvar as variáveis, faça Redeploy do branch de produção**. Confirme que `/login` abre, que `/api/meta` não é acessível sem login, e que as 107 revisões e 78.314 avaliações históricas aparecem após entrar. As páginas, JS e APIs só são entregues após autenticação; a sessão dura até 12 horas e trocar a senha invalida as sessões antigas.
+
+Ainda é necessário agendar o backup externo do PostgreSQL a cada dois dias. Não publique `db/` nem segredos no Git.

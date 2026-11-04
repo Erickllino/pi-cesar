@@ -1,6 +1,7 @@
 """Shared persistence for Vercel/Neon; public prompts remain in Data/*.json."""
 
 import json
+from threading import Lock
 
 from judge import JudgeStore
 from review_app import ReviewStore, load_prompts
@@ -92,15 +93,21 @@ class PostgresJudgeStore(JudgeStore):
     def __init__(self, database_url, prompts):
         self.prompts = prompts
         self.database_url = database_url
+        self._cache = None
+        self._lock = Lock()
 
     def reviews(self):
-        with connect(self.database_url) as db:
-            rows = db.execute("""SELECT prompt_id, verdict, categories, confidence, model,
-                prompt_version, updated_at, probabilities, category_probabilities FROM jev_reviews""").fetchall()
-        return {row[0]: {"verdict": row[1], "categories": json.loads(row[2]), "confidence": row[3],
-                         "model": row[4], "prompt_version": row[5], "updated_at": row[6],
-                         "probabilities": json.loads(row[7]), "category_probabilities": json.loads(row[8])}
-                for row in rows}
+        # Historical results never change through this site; avoid fetching ~54 MB on every comparison.
+        with self._lock:
+            if self._cache is None:
+                with connect(self.database_url) as db:
+                    rows = db.execute("""SELECT prompt_id, verdict, categories, confidence, model,
+                        prompt_version, updated_at, probabilities, category_probabilities FROM jev_reviews""").fetchall()
+                self._cache = {row[0]: {"verdict": row[1], "categories": json.loads(row[2]), "confidence": row[3],
+                                        "model": row[4], "prompt_version": row[5], "updated_at": row[6],
+                                        "probabilities": json.loads(row[7]), "category_probabilities": json.loads(row[8])}
+                               for row in rows}
+            return self._cache
 
     def save(self, prompt_id, result):
         raise NotImplementedError("Resultados históricos do Jev são somente leitura.")

@@ -56,6 +56,8 @@ class PostgresStoreTests(unittest.TestCase):
         ]
         review = store.reviews()["NotInject_one.json:0"]
         self.assertEqual(review["probabilities"]["non-malicious"], 0.9)
+        store.reviews()
+        connect.assert_called_once_with("unused")
         with self.assertRaises(NotImplementedError):
             store.save("NotInject_one.json:0", {})
 

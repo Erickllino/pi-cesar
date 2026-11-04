@@ -12,6 +12,12 @@ function toast(message) {
 }
 
 async function api(url, options) {
+  if (options?.method?.toUpperCase() === 'POST') {
+    const sessionResponse = await fetch('/api/session');
+    if (!sessionResponse.ok) throw new Error('Sessão expirada. Atualize a página e entre novamente.');
+    const session = await sessionResponse.json();
+    options.headers = { ...options.headers, 'X-CSRF-Token': session.csrf };
+  }
   const response = await fetch(url, options);
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || 'Não foi possível concluir a operação.');

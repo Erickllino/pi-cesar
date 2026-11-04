@@ -4,4 +4,4 @@ version = "0.1.0"
 description = "Interface de revisão de prompts PiGuard"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["psycopg[binary]>=3.2,<4"]
+dependencies = ["flask>=3.1,<4", "psycopg[binary]>=3.2,<4"]
