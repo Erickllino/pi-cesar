@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from judge import JudgeStore
 from migrate_sqlite import migrate
-from postgres_store import PostgresJudgeStore, PostgresReviewStore, initialize_database
+from postgres_store import PostgresJudgeStore, PostgresReviewStore, connect as postgres_connect, initialize_database
 from review_app import ReviewStore, create_stores
 
 
@@ -16,6 +16,13 @@ class PostgresStoreTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.data = Path(self.temp.name)
         (self.data / "NotInject_one.json").write_text(json.dumps([{"prompt": "Benign"}]), encoding="utf-8")
+
+    def test_rejects_rest_endpoint_without_echoing_it(self):
+        rest_url = "https://example.neon.tech/neondb/rest/v1?secret=test"
+        with self.assertRaises(ValueError) as error:
+            postgres_connect(rest_url)
+        self.assertIn("PostgreSQL", str(error.exception))
+        self.assertNotIn("secret=test", str(error.exception))
 
     @patch("postgres_store.connect")
     def test_schema_and_defaults(self, connect):

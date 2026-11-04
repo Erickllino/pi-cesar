@@ -7,6 +7,8 @@ from review_app import ReviewStore, load_prompts
 
 
 def connect(database_url):
+    if not isinstance(database_url, str) or not database_url.startswith(("postgresql://", "postgres://")):
+        raise ValueError("DATABASE_URL deve ser a Connection string PostgreSQL do Neon (postgresql://...), não a URL HTTPS da API REST.")
     try:
         import psycopg
     except ImportError as exc:
